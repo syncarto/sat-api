@@ -344,6 +344,45 @@ function buildSort(parameters) {
   return sorting
 }
 
+function buildLatestFilter(parameters) {
+  const { latestFilter } = parameters
+  const sourceParts = []
+  latestFilter.footprintProperties.forEach((propName) => {
+    // TODO this will break if collection is not specified by user
+    //      such that the appropriate properties always exist
+    sourceParts.push(`doc['properties.${propName}'].value`)
+  })
+  const source = sourceParts.join(' + ')
+  let latestQuery
+  if (latestFilter) {
+    latestQuery = {
+      footprint: {
+        terms: {
+          script: {
+            source,
+            lang: 'painless'
+          }
+        },
+        aggs: {
+          top_footprint_hit: {
+            top_hits: {
+              sort: [
+                {
+                  'properties.datetime': {
+                    order: 'desc'
+                  }
+                }
+              ],
+              size: 1
+            }
+          }
+        }
+      }
+    }
+  }
+  return latestQuery
+}
+
 async function search(parameters, index = '*', page = 1, limit = 10) {
   let body
   if (parameters.id) {
@@ -354,6 +393,21 @@ async function search(parameters, index = '*', page = 1, limit = 10) {
   }
   const sort = buildSort(parameters)
   body.sort = sort
+
+  if (parameters.latestFilter) {
+    const latestQuery = buildLatestFilter(parameters)
+    body = {
+      size: 0,
+      aggs: {
+        pre_filter: {
+          filter: body.query.constant_score.filter,
+          aggs: latestQuery
+        }
+      }
+    }
+  }
+  // console.log(JSON.stringify(body, undefined, 2))
+
   const searchParams = {
     index,
     body,
@@ -363,7 +417,18 @@ async function search(parameters, index = '*', page = 1, limit = 10) {
 
   const client = await esClient()
   const resultBody = await client.search(searchParams)
-  const results = resultBody.hits.hits.map((r) => (r._source))
+  let results
+  if (parameters.latestFilter) {
+    results =
+      resultBody
+        .aggregations
+        .pre_filter
+        .footprint
+        .buckets
+        .map((bucket) => (bucket.top_footprint_hit.hits.hits[0]._source))
+  } else {
+    results = resultBody.hits.hits.map((r) => (r._source))
+  }
   const response = {
     results,
     meta: {

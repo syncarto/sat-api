@@ -51,6 +51,9 @@ const go = async (queryParams) => {
   })
 }
 
+// go(sentinelQueryParams)
+// go(landsatQueryParams)
+sentinelQueryParams.latestFilter = undefined
+landsatQueryParams.latestFilter = undefined
 go(sentinelQueryParams)
 go(landsatQueryParams)
-

@@ -78,6 +78,19 @@ const extractSort = function (params) {
   return sortRules
 }
 
+const extractLatestFilter = function (params) {
+  let latestFilterQuery
+  const { latestFilter } = params
+  if (latestFilter) {
+    if (typeof latestFilter === 'string') {
+      latestFilterQuery = JSON.parse(latestFilter)
+    } else {
+      latestFilterQuery = Object.assign({}, latestFilter)
+    }
+  }
+  return latestFilterQuery
+}
+
 const parsePath = function (path) {
   const searchFilters = {
     stac: false,
@@ -241,47 +254,6 @@ const buildPageLinks = function (meta, parameters, endpoint) {
   return pageLinks
 }
 
-const handleLatestFilter = function (latestFilter, results) {
-  const newFeatures = []
-  const featuresByFootprint = {}
-
-  // build up list of features corresponding to each footprint
-  results.features.forEach((feat) => {
-    let propsString = ''
-    latestFilter.footprintProperties.forEach((prop) => {
-      propsString += feat.properties[prop]
-    })
-    if (!featuresByFootprint[propsString]) {
-      featuresByFootprint[propsString] = []
-    }
-    featuresByFootprint[propsString].push(feat)
-  })
-
-  // filter down to latest for each footprint
-  Object.keys(featuresByFootprint).forEach((footprint) => {
-    const footprintFeatures = featuresByFootprint[footprint]
-
-    // sort features by descending time (latest feature will be first in result)
-    footprintFeatures.sort((a, b) => {
-      const aSeconds = Date.parse(a.properties.datetime)
-      const bSeconds = Date.parse(b.properties.datetime)
-      if (aSeconds < bSeconds) {
-        return 1
-      }
-      if (aSeconds > bSeconds) {
-        return -1
-      }
-      return 0
-    })
-
-    newFeatures.push(footprintFeatures[0])
-  })
-  results.features = newFeatures
-
-  // TODO this only works if we have entire result set here!
-  //      (i.e. Limit < actual # of results will cause this to break)
-}
-
 const searchItems = async function (parameters, page, limit, backend, endpoint) {
   const { results: itemsResults, meta: itemsMeta } =
     await backend.search(parameters, 'items', page, limit)
@@ -328,11 +300,13 @@ const search = async function (
     // Prefer intersects
     const intersects = hasIntersects || bbox
     const query = extractStacQuery(queryParameters)
+    const latestFilter = extractLatestFilter(queryParameters)
     const parameters = {
       datetime,
       intersects,
       query,
-      sort
+      sort,
+      latestFilter
     }
     // Keep only exisiting parameters
     const searchParameters = Object.keys(parameters)
@@ -400,10 +374,6 @@ const search = async function (
       } else {
         apiResponse = new Error('Item not found')
       }
-    }
-
-    if (queryParameters.latestFilter) {
-      handleLatestFilter(queryParameters.latestFilter, apiResponse)
     }
   } catch (error) {
     logger.error(error)
