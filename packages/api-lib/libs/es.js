@@ -120,7 +120,11 @@ async function prepare(index) {
               geometry: {
                 type: 'geo_shape',
                 tree: 'quadtree',
-                precision: '5mi'
+                // mjh testing whether using default precision of 50meters here
+                // alleviates some issues with getting back features that don't
+                // actually intersect with query bbox
+                precision: '50m'
+                // precision: '5mi'
               }
             }
           }
