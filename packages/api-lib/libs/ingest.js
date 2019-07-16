@@ -51,6 +51,7 @@ function getS3ParamsFromUrl(url) {
   const key = remainingParts.join('/')
   logger.debug(`parsed Bucket: ${bucket} Key: ${key} from ${url}`)
   return {
+    RequestPayer: process.env.AWS_REQUEST_PAYER,
     Bucket: bucket,
     Key: key
   }
